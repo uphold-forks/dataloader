@@ -7,6 +7,7 @@ import (
 type TraceLoadFinishFunc[V any] func(Thunk[V])
 type TraceLoadManyFinishFunc[V any] func(ThunkMany[V])
 type TraceBatchFinishFunc[V any] func([]*Result[V])
+type TraceWaitFinishFunc[V any] func()
 
 // Tracer is an interface that may be used to implement tracing.
 type Tracer[K comparable, V any] interface {
@@ -16,6 +17,8 @@ type Tracer[K comparable, V any] interface {
 	TraceLoadMany(ctx context.Context, keys []K) (context.Context, TraceLoadManyFinishFunc[V])
 	// TraceBatch will trace data loader batches.
 	TraceBatch(ctx context.Context, keys []K) (context.Context, TraceBatchFinishFunc[V])
+	// TraceWait will trace waits between load and batches.
+	TraceWait(ctx context.Context, keys []K) (context.Context, TraceWaitFinishFunc[V])
 }
 
 // NoopTracer is the default (noop) tracer
@@ -34,4 +37,9 @@ func (NoopTracer[K, V]) TraceLoadMany(ctx context.Context, keys []K) (context.Co
 // TraceBatch is a noop function
 func (NoopTracer[K, V]) TraceBatch(ctx context.Context, keys []K) (context.Context, TraceBatchFinishFunc[V]) {
 	return ctx, func(result []*Result[V]) {}
+}
+
+// TraceWait is a noop function
+func (NoopTracer[K, V]) TraceWait(ctx context.Context, keys []K) (context.Context, TraceWaitFinishFunc[V]) {
+	return ctx, func() {}
 }

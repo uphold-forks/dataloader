@@ -220,6 +220,7 @@ func NewBatchedLoader[K comparable, V any](batchFn BatchFunc[K, V], opts ...Opti
 // the registered BatchFunc.
 func (l *Loader[K, V]) Load(originalContext context.Context, key K) Thunk[V] {
 	ctx, finish := l.tracer.TraceLoad(originalContext, key)
+	ctx, finishWait := l.tracer.TraceWait(ctx, []K{key})
 
 	c := make(chan *Result[V], 1)
 	var result struct {
@@ -236,6 +237,7 @@ func (l *Loader[K, V]) Load(originalContext context.Context, key K) Thunk[V] {
 	}
 
 	thunk := func() (V, error) {
+		defer finishWait()
 		result.mu.RLock()
 		resultNotSet := result.value == nil
 		result.mu.RUnlock()
@@ -251,7 +253,7 @@ func (l *Loader[K, V]) Load(originalContext context.Context, key K) Thunk[V] {
 		defer result.mu.RUnlock()
 		var ev *PanicErrorWrapper
 		var es *SkipCacheError
-		if result.value.Error != nil && (errors.As(result.value.Error, &ev) || errors.As(result.value.Error, &es)){
+		if result.value.Error != nil && (errors.As(result.value.Error, &ev) || errors.As(result.value.Error, &es)) {
 			l.Clear(ctx, key)
 		}
 		return result.value.Data, result.value.Error
@@ -301,6 +303,7 @@ func (l *Loader[K, V]) Load(originalContext context.Context, key K) Thunk[V] {
 // LoadMany loads multiple keys, returning a thunk (type: ThunkMany) that will resolve the keys passed in.
 func (l *Loader[K, V]) LoadMany(originalContext context.Context, keys []K) ThunkMany[V] {
 	ctx, finish := l.tracer.TraceLoadMany(originalContext, keys)
+	ctx, finishWait := l.tracer.TraceWait(ctx, keys)
 
 	var (
 		length = len(keys)
@@ -346,6 +349,7 @@ func (l *Loader[K, V]) LoadMany(originalContext context.Context, keys []K) Thunk
 	}
 
 	thunkMany := func() ([]V, []error) {
+		defer finishWait()
 		result.mu.RLock()
 		resultNotSet := result.value == nil
 		result.mu.RUnlock()

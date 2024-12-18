@@ -59,3 +59,14 @@ func (t Tracer[K, V]) TraceBatch(ctx context.Context, keys []K) (context.Context
 		span.End()
 	}
 }
+
+// TraceWait will trace the wait time between load and batch calls with Open Tracing.
+func (t Tracer[K, V]) TraceWait(ctx context.Context, keys []K) (context.Context, dataloader.TraceWaitFinishFunc[V]) {
+	spanCtx, span := t.Tracer().Start(ctx, "Dataloader: wait")
+
+	span.SetAttributes(attribute.String("dataloader.keys", fmt.Sprintf("%v", keys)))
+
+	return spanCtx, func() {
+		span.End()
+	}
+}

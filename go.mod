@@ -1,6 +1,8 @@
-module github.com/uphold-forks/dataloader/v7
+module github.com/kamefrede/dataloader/v7
 
 go 1.18
+
+replace github.com/graph-gophers/dataloader/v7 => ./
 
 require (
 	github.com/graph-gophers/dataloader/v7 v7.1.0

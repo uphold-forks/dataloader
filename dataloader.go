@@ -251,7 +251,7 @@ func (l *Loader[K, V]) Load(originalContext context.Context, key K) Thunk[V] {
 		defer result.mu.RUnlock()
 		var ev *PanicErrorWrapper
 		var es *SkipCacheError
-		if result.value.Error != nil && (errors.As(result.value.Error, &ev) || errors.As(result.value.Error, &es)){
+		if result.value.Error != nil && (errors.As(result.value.Error, &ev) || errors.As(result.value.Error, &es)) {
 			l.Clear(ctx, key)
 		}
 		return result.value.Data, result.value.Error
@@ -268,7 +268,8 @@ func (l *Loader[K, V]) Load(originalContext context.Context, key K) Thunk[V] {
 	l.batchLock.Lock()
 	// start the batch window if it hasn't already started.
 	if l.curBatcher == nil {
-		l.curBatcher = l.newBatcher(l.silent, l.tracer)
+		_, finish := l.tracer.TraceWait(originalContext)
+		l.curBatcher = l.newBatcher(l.silent, l.tracer, finish)
 		// start the current batcher batch function
 		go l.curBatcher.batch(originalContext)
 		// start a sleeper for the current batcher
@@ -405,21 +406,23 @@ func (l *Loader[K, V]) reset() {
 }
 
 type batcher[K comparable, V any] struct {
-	input    chan *batchRequest[K, V]
-	batchFn  BatchFunc[K, V]
-	finished bool
-	silent   bool
-	tracer   Tracer[K, V]
+	input          chan *batchRequest[K, V]
+	batchFn        BatchFunc[K, V]
+	finished       bool
+	silent         bool
+	tracer         Tracer[K, V]
+	finishWaitFunc TraceWaitFinishFunc[K]
 }
 
 // newBatcher returns a batcher for the current requests
 // all the batcher methods must be protected by a global batchLock
-func (l *Loader[K, V]) newBatcher(silent bool, tracer Tracer[K, V]) *batcher[K, V] {
+func (l *Loader[K, V]) newBatcher(silent bool, tracer Tracer[K, V], finishWaitFunc TraceWaitFinishFunc[K]) *batcher[K, V] {
 	return &batcher[K, V]{
-		input:   make(chan *batchRequest[K, V], l.inputCap),
-		batchFn: l.batchFn,
-		silent:  silent,
-		tracer:  tracer,
+		input:          make(chan *batchRequest[K, V], l.inputCap),
+		batchFn:        l.batchFn,
+		silent:         silent,
+		tracer:         tracer,
+		finishWaitFunc: finishWaitFunc,
 	}
 }
 
@@ -461,6 +464,7 @@ func (b *batcher[K, V]) batch(originalContext context.Context) {
 				log.Printf("Dataloader: Panic received in batch function: %v\n%s", panicErr, buf)
 			}
 		}()
+		b.finishWaitFunc(keys)
 		items = b.batchFn(ctx, keys)
 	}()
 

@@ -88,7 +88,7 @@ type Loader[K comparable, V any] struct {
 
 	// the internal cache. This packages contains a basic cache implementation but any custom cache
 	// implementation could be used as long as it implements the `Cache` interface.
-	cacheLock sync.Mutex
+	cacheLock sync.Locker
 	cache     Cache[K, V]
 	// should we clear the cache on each batch?
 	// this would allow batching but no long term caching
@@ -144,6 +144,14 @@ func WithCache[K comparable, V any](c Cache[K, V]) Option[K, V] {
 	}
 }
 
+// WithCacheLock sets the BatchedLoader cacheLock to a custom mutex.
+// Only use if you know what you are doing.
+func WithCacheLock[K comparable, V any](mu sync.Locker) Option[K, V] {
+	return func(l *Loader[K, V]) {
+		l.cacheLock = mu
+	}
+}
+
 // WithBatchCapacity sets the batch capacity. Default is 0 (unbounded).
 func WithBatchCapacity[K comparable, V any](c int) Option[K, V] {
 	return func(l *Loader[K, V]) {
@@ -193,9 +201,10 @@ func WithTracer[K comparable, V any](tracer Tracer[K, V]) Option[K, V] {
 // NewBatchedLoader constructs a new Loader with given options.
 func NewBatchedLoader[K comparable, V any](batchFn BatchFunc[K, V], opts ...Option[K, V]) *Loader[K, V] {
 	loader := &Loader[K, V]{
-		batchFn:  batchFn,
-		inputCap: 1000,
-		wait:     16 * time.Millisecond,
+		batchFn:   batchFn,
+		inputCap:  1000,
+		wait:      16 * time.Millisecond,
+		cacheLock: &sync.Mutex{},
 	}
 
 	// Apply options
